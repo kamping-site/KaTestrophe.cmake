@@ -1,3 +1,11 @@
+// Copyright (C) 2021-2025 by Tim Niklas Uhl
+//
+// This has been copied from LLNL/gtest-mpi-listener with minor modification,
+// which in turn is based on an example from Google Test and triple-licensed
+// under BSD-3, MIT, and Apache 2.0
+//
+// The original copyright notices are replicated below
+
 /******************************************************************************
  *
  * Copyright (c) 2016-2018, Lawrence Livermore National Security, LLC

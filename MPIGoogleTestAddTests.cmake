@@ -1,4 +1,4 @@
-# Adapted by the KaMPIng authors from GoogleTestAddTests.cmake included in CMake.
+# Adapted by Tim Niklas Uhl from GoogleTestAddTests.cmake included in CMake.
 #
 # Original license information:
 #
