@@ -94,7 +94,7 @@ target_link_libraries(mpi-gtest-main PUBLIC gtest-mpi-listener)
 
 add_library(KaTestrophe_main INTERFACE)
 target_link_libraries(KaTestrophe_main INTERFACE mpi-gtest-main)
-add_library(KatTestrophe::main ALIAS KaTestrophe_main)
+add_library(KaTestrophe::main ALIAS KaTestrophe_main)
 
 # keep the cache clean
 mark_as_advanced(

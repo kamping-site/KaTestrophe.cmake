@@ -23,7 +23,7 @@ cmake_minimum_required(VERSION 3.23)
 
 project(
   KaTestrophe
-  VERSION 1.0
+  VERSION 1.0.1
   DESCRIPTION "A small CMake helper for testing MPI code with Google Test"
   LANGUAGES CXX
 )
