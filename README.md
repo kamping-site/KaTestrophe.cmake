@@ -15,6 +15,8 @@ FetchContent_MakeAvailable(KaTestrophe)
 ```
 ## 2. Write you tests as usual using GoogleTest and use MPI functions
 ```cpp
+# FILE: simple_test.cpp
+
 #include <gtest/gtest.h>
 #include <mpi.h>
 
@@ -34,6 +36,8 @@ TEST(KaTestropheSimpleTest, broadcast_works) {
 ```cmake
 # link the KatTestrophe library, which ensure that MPI is initialized and finalized correctly
 # before and after the test and provides the main function for the test
+add_executable(simple_test simple_test.cpp)
+
 target_link_libraries(simple_test PRIVATE KatTestrophe::main)
 
 # register the test with CTest and execute it using MPI with 1 to 4 processes
