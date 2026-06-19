@@ -22,12 +22,20 @@
 
 #include "gtest-mpi-listener.hpp"
 
+// The thread support level requested from MPI_Init_thread. Defaults to MPI_THREAD_SINGLE, which the
+// MPI standard defines as equivalent to the plain MPI_Init.
+// Override per main library via katestrophe_add_mpi_main(THREAD_LEVEL).
+#ifndef KATESTROPHE_REQUIRED_THREAD_LEVEL
+    #define KATESTROPHE_REQUIRED_THREAD_LEVEL MPI_THREAD_SINGLE
+#endif
+
 int main(int argc, char** argv) {
     // Filter out Google Test arguments
     ::testing::InitGoogleTest(&argc, argv);
 
-    // Initialize MPI
-    MPI_Init(&argc, &argv);
+    // Initialize MPI at the requested thread support level.
+    int provided = MPI_THREAD_SINGLE;
+    MPI_Init_thread(&argc, &argv, KATESTROPHE_REQUIRED_THREAD_LEVEL, &provided);
 
     int init_flag;
     MPI_Initialized(&init_flag);

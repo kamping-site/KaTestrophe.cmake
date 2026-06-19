@@ -86,11 +86,31 @@ function(katestrophe_has_oversubscribe KATESTROPHE_OVERSUBSCRIBE_FLAG)
 endfunction()
 katestrophe_has_oversubscribe(MPIEXEC_OVERSUBSCRIBE_FLAG)
 
-# register the test main class
-add_library(
-  mpi-gtest-main EXCLUDE_FROM_ALL ${CMAKE_CURRENT_LIST_DIR}/mpi_gtest_main.cpp
-)
-target_link_libraries(mpi-gtest-main PUBLIC gtest-mpi-listener)
+# Registers the Google Test + MPI entry point as the library target TARGET_NAME. The MPI runtime is
+# initialized with MPI_Init_thread at the requested THREAD_LEVEL (an MPI_THREAD_* constant); when
+# THREAD_LEVEL is omitted it defaults to MPI_THREAD_SINGLE, which the MPI standard defines as
+# equivalent to the plain MPI_Init used by the default KaTestrophe::main. Link the resulting target
+# into a test executable instead of mpi-gtest-main / KaTestrophe::main to obtain an elevated level;
+# tests can read the level the runtime actually provided with MPI_Query_thread.
+#
+# example: katestrophe_add_mpi_main(my-mpi-main THREAD_LEVEL MPI_THREAD_MULTIPLE)
+function(katestrophe_add_mpi_main TARGET_NAME)
+  cmake_parse_arguments("KATESTROPHE" "" "THREAD_LEVEL" "" ${ARGN})
+  add_library(
+    ${TARGET_NAME} EXCLUDE_FROM_ALL
+                   ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/mpi_gtest_main.cpp
+  )
+  target_link_libraries(${TARGET_NAME} PUBLIC gtest-mpi-listener)
+  if(KATESTROPHE_THREAD_LEVEL)
+    target_compile_definitions(
+      ${TARGET_NAME}
+      PRIVATE KATESTROPHE_REQUIRED_THREAD_LEVEL=${KATESTROPHE_THREAD_LEVEL}
+    )
+  endif()
+endfunction()
+
+# register the default test main class (MPI_THREAD_SINGLE, i.e. the legacy plain-MPI_Init behavior)
+katestrophe_add_mpi_main(mpi-gtest-main)
 
 add_library(KaTestrophe_main INTERFACE)
 target_link_libraries(KaTestrophe_main INTERFACE mpi-gtest-main)

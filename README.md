@@ -47,6 +47,31 @@ katestrophe_add_mpi_test(simple_test CORES 1 2 3 4)
 katestrophe_add_mpi_test(simple_test DISCOVER_TESTS CORES 1 2 3 4)
 ```
 
+### Requesting an MPI thread support level
+
+`KaTestrophe::main` initializes MPI at `MPI_THREAD_SINGLE`. To exercise code that needs a higher
+level, build a dedicated main with `katestrophe_add_mpi_main` and link it instead:
+
+```cmake
+# a Google Test + MPI entry point initialized with MPI_Init_thread(MPI_THREAD_MULTIPLE)
+katestrophe_add_mpi_main(my-mpi-main THREAD_LEVEL MPI_THREAD_MULTIPLE)
+
+add_executable(threaded_test threaded_test.cpp)
+target_link_libraries(threaded_test PRIVATE my-mpi-main)
+katestrophe_add_mpi_test(threaded_test CORES 1 2 4)
+```
+
+Because an implementation may provide a lower level than requested, query what was actually provided
+with `MPI_Query_thread` and skip otherwise:
+
+```cpp
+int provided = MPI_THREAD_SINGLE;
+MPI_Query_thread(&provided);
+if (provided < MPI_THREAD_MULTIPLE) {
+  GTEST_SKIP() << "runtime does not provide MPI_THREAD_MULTIPLE";
+}
+```
+
 ## LICENSE
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
