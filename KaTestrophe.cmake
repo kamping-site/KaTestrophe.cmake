@@ -109,12 +109,25 @@ function(katestrophe_add_mpi_main TARGET_NAME)
   endif()
 endfunction()
 
-# register the default test main class (MPI_THREAD_SINGLE, i.e. the legacy plain-MPI_Init behavior)
-katestrophe_add_mpi_main(mpi-gtest-main)
+# Register a Google Test + MPI entry point for each MPI thread support level. Consumers link the
+# matching alias target (KaTestrophe::main_thread_<level>) instead of building their own main.
+katestrophe_add_mpi_main(mpi-gtest-main-thread-single THREAD_LEVEL MPI_THREAD_SINGLE)
+katestrophe_add_mpi_main(mpi-gtest-main-thread-funneled THREAD_LEVEL MPI_THREAD_FUNNELED)
+katestrophe_add_mpi_main(mpi-gtest-main-thread-serialized THREAD_LEVEL MPI_THREAD_SERIALIZED)
+katestrophe_add_mpi_main(mpi-gtest-main-thread-multiple THREAD_LEVEL MPI_THREAD_MULTIPLE)
 
-add_library(KaTestrophe_main INTERFACE)
-target_link_libraries(KaTestrophe_main INTERFACE mpi-gtest-main)
-add_library(KaTestrophe::main ALIAS KaTestrophe_main)
+foreach(KATESTROPHE_LEVEL single funneled serialized multiple)
+  add_library(KaTestrophe_main_thread_${KATESTROPHE_LEVEL} INTERFACE)
+  target_link_libraries(
+    KaTestrophe_main_thread_${KATESTROPHE_LEVEL} INTERFACE
+    mpi-gtest-main-thread-${KATESTROPHE_LEVEL}
+  )
+  add_library(KaTestrophe::main_thread_${KATESTROPHE_LEVEL} ALIAS
+              KaTestrophe_main_thread_${KATESTROPHE_LEVEL})
+endforeach()
+
+# KaTestrophe::main keeps the historic default (MPI_THREAD_SINGLE, i.e. plain-MPI_Init behavior).
+add_library(KaTestrophe::main ALIAS KaTestrophe_main_thread_single)
 
 # keep the cache clean
 mark_as_advanced(
@@ -139,7 +152,7 @@ mark_as_advanced(
 function(katestrophe_add_test_executable KATESTROPHE_TARGET)
   cmake_parse_arguments("KATESTROPHE" "" "" "FILES" ${ARGN})
   add_executable(${KATESTROPHE_TARGET} "${KATESTROPHE_FILES}")
-  target_link_libraries(${KATESTROPHE_TARGET} PUBLIC mpi-gtest-main)
+  target_link_libraries(${KATESTROPHE_TARGET} PUBLIC KaTestrophe::main)
 endfunction()
 
 # Registers an executable target KATESTROPHE_TEST_TARGET as a test to be

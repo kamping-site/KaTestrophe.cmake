@@ -50,14 +50,22 @@ katestrophe_add_mpi_test(simple_test DISCOVER_TESTS CORES 1 2 3 4)
 ### Requesting an MPI thread support level
 
 `KaTestrophe::main` initializes MPI at `MPI_THREAD_SINGLE`. To exercise code that needs a higher
-level, build a dedicated main with `katestrophe_add_mpi_main` and link it instead:
+level, link one of the predefined main targets instead. There is one alias per MPI thread support
+level:
+
+| Target                                | `MPI_Init_thread` level |
+| ------------------------------------- | ----------------------- |
+| `KaTestrophe::main`                   | `MPI_THREAD_SINGLE`     |
+| `KaTestrophe::main_thread_single`     | `MPI_THREAD_SINGLE`     |
+| `KaTestrophe::main_thread_funneled`   | `MPI_THREAD_FUNNELED`   |
+| `KaTestrophe::main_thread_serialized` | `MPI_THREAD_SERIALIZED` |
+| `KaTestrophe::main_thread_multiple`   | `MPI_THREAD_MULTIPLE`   |
 
 ```cmake
-# a Google Test + MPI entry point initialized with MPI_Init_thread(MPI_THREAD_MULTIPLE)
-katestrophe_add_mpi_main(my-mpi-main THREAD_LEVEL MPI_THREAD_MULTIPLE)
-
 add_executable(threaded_test threaded_test.cpp)
-target_link_libraries(threaded_test PRIVATE my-mpi-main)
+
+# initialize MPI with MPI_Init_thread(MPI_THREAD_MULTIPLE)
+target_link_libraries(threaded_test PRIVATE KaTestrophe::main_thread_multiple)
 katestrophe_add_mpi_test(threaded_test CORES 1 2 4)
 ```
 

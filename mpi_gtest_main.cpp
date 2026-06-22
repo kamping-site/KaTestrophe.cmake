@@ -15,6 +15,7 @@
  *
  ******************************************************************************/
 
+#include <iostream>
 #include <stdexcept>
 
 #include <gtest/gtest.h>
@@ -41,6 +42,19 @@ int main(int argc, char** argv) {
     MPI_Initialized(&init_flag);
     if (!init_flag) {
         throw std::runtime_error("Not initialized");
+    }
+
+    // MPI thread support levels are monotonically ordered constants. If the implementation could not
+    // honor the requested level it returns a lower one in `provided`; warn (once, on rank 0) so the
+    // mismatch is not silently ignored. Tests can still inspect the actual level via MPI_Query_thread.
+    if (provided < KATESTROPHE_REQUIRED_THREAD_LEVEL) {
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        if (rank == 0) {
+            std::cerr << "[KaTestrophe] warning: requested MPI thread support level "
+                      << KATESTROPHE_REQUIRED_THREAD_LEVEL << " but the runtime only provides "
+                      << provided << "\n";
+        }
     }
 
     // Add object that will finalize MPI on exit; Google Test owns this pointer
