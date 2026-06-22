@@ -86,15 +86,48 @@ function(katestrophe_has_oversubscribe KATESTROPHE_OVERSUBSCRIBE_FLAG)
 endfunction()
 katestrophe_has_oversubscribe(MPIEXEC_OVERSUBSCRIBE_FLAG)
 
-# register the test main class
-add_library(
-  mpi-gtest-main EXCLUDE_FROM_ALL ${CMAKE_CURRENT_LIST_DIR}/mpi_gtest_main.cpp
-)
-target_link_libraries(mpi-gtest-main PUBLIC gtest-mpi-listener)
+# Registers the Google Test + MPI entry point as the library target TARGET_NAME. The MPI runtime is
+# initialized with MPI_Init_thread at the requested THREAD_LEVEL (an MPI_THREAD_* constant); when
+# THREAD_LEVEL is omitted it defaults to MPI_THREAD_SINGLE, which the MPI standard defines as
+# equivalent to the plain MPI_Init used by the default KaTestrophe::main. Link the resulting target
+# into a test executable instead of mpi-gtest-main / KaTestrophe::main to obtain an elevated level;
+# tests can read the level the runtime actually provided with MPI_Query_thread.
+#
+# example: katestrophe_add_mpi_main(my-mpi-main THREAD_LEVEL MPI_THREAD_MULTIPLE)
+function(katestrophe_add_mpi_main TARGET_NAME)
+  cmake_parse_arguments("KATESTROPHE" "" "THREAD_LEVEL" "" ${ARGN})
+  add_library(
+    ${TARGET_NAME} EXCLUDE_FROM_ALL
+                   ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/mpi_gtest_main.cpp
+  )
+  target_link_libraries(${TARGET_NAME} PUBLIC gtest-mpi-listener)
+  if(KATESTROPHE_THREAD_LEVEL)
+    target_compile_definitions(
+      ${TARGET_NAME}
+      PRIVATE KATESTROPHE_REQUIRED_THREAD_LEVEL=${KATESTROPHE_THREAD_LEVEL}
+    )
+  endif()
+endfunction()
 
-add_library(KaTestrophe_main INTERFACE)
-target_link_libraries(KaTestrophe_main INTERFACE mpi-gtest-main)
-add_library(KaTestrophe::main ALIAS KaTestrophe_main)
+# Register a Google Test + MPI entry point for each MPI thread support level. Consumers link the
+# matching alias target (KaTestrophe::main_thread_<level>) instead of building their own main.
+katestrophe_add_mpi_main(mpi-gtest-main-thread-single THREAD_LEVEL MPI_THREAD_SINGLE)
+katestrophe_add_mpi_main(mpi-gtest-main-thread-funneled THREAD_LEVEL MPI_THREAD_FUNNELED)
+katestrophe_add_mpi_main(mpi-gtest-main-thread-serialized THREAD_LEVEL MPI_THREAD_SERIALIZED)
+katestrophe_add_mpi_main(mpi-gtest-main-thread-multiple THREAD_LEVEL MPI_THREAD_MULTIPLE)
+
+foreach(KATESTROPHE_LEVEL single funneled serialized multiple)
+  add_library(KaTestrophe_main_thread_${KATESTROPHE_LEVEL} INTERFACE)
+  target_link_libraries(
+    KaTestrophe_main_thread_${KATESTROPHE_LEVEL} INTERFACE
+    mpi-gtest-main-thread-${KATESTROPHE_LEVEL}
+  )
+  add_library(KaTestrophe::main_thread_${KATESTROPHE_LEVEL} ALIAS
+              KaTestrophe_main_thread_${KATESTROPHE_LEVEL})
+endforeach()
+
+# KaTestrophe::main keeps the historic default (MPI_THREAD_SINGLE, i.e. plain-MPI_Init behavior).
+add_library(KaTestrophe::main ALIAS KaTestrophe_main_thread_single)
 
 # keep the cache clean
 mark_as_advanced(
@@ -119,7 +152,7 @@ mark_as_advanced(
 function(katestrophe_add_test_executable KATESTROPHE_TARGET)
   cmake_parse_arguments("KATESTROPHE" "" "" "FILES" ${ARGN})
   add_executable(${KATESTROPHE_TARGET} "${KATESTROPHE_FILES}")
-  target_link_libraries(${KATESTROPHE_TARGET} PUBLIC mpi-gtest-main)
+  target_link_libraries(${KATESTROPHE_TARGET} PUBLIC KaTestrophe::main)
 endfunction()
 
 # Registers an executable target KATESTROPHE_TEST_TARGET as a test to be
