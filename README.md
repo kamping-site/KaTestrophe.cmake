@@ -9,7 +9,7 @@ include(FetchContent)
 FetchContent_Declare(
   KaTestrophe
   GIT_REPOSITORY https://github.com/kamping-site/KaTestrophe.cmake
-  GIT_TAG        v1.0
+  GIT_TAG        v1.2.0
 )
 FetchContent_MakeAvailable(KaTestrophe)
 ```
@@ -79,6 +79,27 @@ if (provided < MPI_THREAD_MULTIPLE) {
   GTEST_SKIP() << "runtime does not provide MPI_THREAD_MULTIPLE";
 }
 ```
+
+### Running more ranks than cores
+
+Open MPI refuses to start more ranks than there are slots. KaTestrophe detects Open MPI from
+`mpiexec --version` and then passes `--oversubscribe` (MPICH and Intel MPI oversubscribe without a
+flag). Override the detected flag with `-DKATESTROPHE_MPIEXEC_OVERSUBSCRIBE_FLAG=...`.
+
+To skip rank counts instead of oversubscribing, set `KATESTROPHE_MAX_CORES`. Tests registered with
+more ranks are then not added to CTest. For example, to limit tests to the cores of the machine:
+
+```cmake
+find_package(MPI REQUIRED)
+set(KATESTROPHE_MAX_CORES ${MPIEXEC_MAX_NUMPROCS}) # before FetchContent_MakeAvailable(KaTestrophe)
+```
+
+or from the command line: `cmake -DKATESTROPHE_MAX_CORES=4 ...`.
+
+### Working directory
+
+Tests run in `PROJECT_SOURCE_DIR` by default, with and without `DISCOVER_TESTS`. Pass
+`WORKING_DIRECTORY <dir>` to `katestrophe_add_mpi_test` to change it.
 
 ## LICENSE
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
