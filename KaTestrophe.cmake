@@ -35,6 +35,8 @@ else()
     googletest
     GIT_REPOSITORY https://github.com/google/googletest
     GIT_TAG "${KATESTROPHE_GTEST_VERSION}"
+    GIT_SHALLOW ON
+    SYSTEM
   )
   set(INSTALL_GTEST OFF)
   FetchContent_MakeAvailable(googletest)
@@ -56,35 +58,51 @@ target_link_libraries(
   gtest-mpi-listener INTERFACE MPI::MPI_CXX GTest::gtest GTest::gmock
 )
 
-# sets the provided output variable KATESTROPHE_OVERSUBSCRIBE_FLAG to the flags
-# required to run mpiexec with more MPI ranks than cores available
-function(katestrophe_has_oversubscribe KATESTROPHE_OVERSUBSCRIBE_FLAG)
-  if(MPI_CXX_LIBRARY_VERSION_STRING)
-    string(FIND ${MPI_CXX_LIBRARY_VERSION_STRING} "OpenMPI" SEARCH_POSITION1)
-    string(FIND ${MPI_CXX_LIBRARY_VERSION_STRING} "Open MPI" SEARCH_POSITION2)
-    # only Open MPI seems to require the --oversubscribe flag MPICH and Intel
-    # don't know it but silently run commands with more ranks than cores
-    # available
-    if(${SEARCH_POSITION1} EQUAL -1 AND ${SEARCH_POSITION2} EQUAL -1)
-      set("${KATESTROPHE_OVERSUBSCRIBE_FLAG}"
-          ""
-          PARENT_SCOPE
-      )
-    else()
-      # We are using Open MPI
-      set("${KATESTROPHE_OVERSUBSCRIBE_FLAG}"
-          "--oversubscribe"
-          PARENT_SCOPE
-      )
-    endif()
-  else()
-    set("${KATESTROPHE_OVERSUBSCRIBE_FLAG}"
-        ""
-        PARENT_SCOPE
+# Open MPI refuses to start more ranks than there are slots unless --oversubscribe is passed; MPICH
+# and Intel MPI do not know the flag but oversubscribe silently. The MPI implementation is detected
+# from `mpiexec --version` (FindMPI only reports MPI_CXX_LIBRARY_VERSION_STRING when
+# MPI_DETERMINE_LIBRARY_VERSION is set). The result is a cache variable, so it is visible in every
+# directory, including when KaTestrophe is added via FetchContent/add_subdirectory, and can be
+# overridden by the user.
+if(NOT DEFINED KATESTROPHE_MPIEXEC_OVERSUBSCRIBE_FLAG)
+  set(_katestrophe_oversubscribe_flag "")
+  if(MPIEXEC_EXECUTABLE)
+    execute_process(
+      COMMAND ${MPIEXEC_EXECUTABLE} --version
+      OUTPUT_VARIABLE _katestrophe_mpiexec_version
+      ERROR_VARIABLE _katestrophe_mpiexec_version
+      RESULT_VARIABLE _katestrophe_mpiexec_result
+      TIMEOUT 10
     )
+    if(_katestrophe_mpiexec_result EQUAL 0
+       AND _katestrophe_mpiexec_version MATCHES "Open MPI|OpenMPI|OpenRTE|Open RTE|prterun"
+    )
+      set(_katestrophe_oversubscribe_flag "--oversubscribe")
+    endif()
   endif()
+  set(KATESTROPHE_MPIEXEC_OVERSUBSCRIBE_FLAG
+      "${_katestrophe_oversubscribe_flag}"
+      CACHE STRING "Flag passed to mpiexec to allow more MPI ranks than available slots (detected)."
+  )
+  mark_as_advanced(KATESTROPHE_MPIEXEC_OVERSUBSCRIBE_FLAG)
+endif()
+
+set(KATESTROPHE_MAX_CORES
+    ""
+    CACHE STRING
+    "If set, katestrophe_add_mpi_test skips rank counts larger than this (e.g. ${MPIEXEC_MAX_NUMPROCS}, the number of cores on this machine). Empty: no limit, oversubscribe instead."
+)
+
+# sets the provided output variable KATESTROPHE_OVERSUBSCRIBE_FLAG to the flags required to run
+# mpiexec with more MPI ranks than cores available (kept for backwards compatibility)
+function(katestrophe_has_oversubscribe KATESTROPHE_OVERSUBSCRIBE_FLAG)
+  set("${KATESTROPHE_OVERSUBSCRIBE_FLAG}"
+      "${KATESTROPHE_MPIEXEC_OVERSUBSCRIBE_FLAG}"
+      PARENT_SCOPE
+  )
 endfunction()
-katestrophe_has_oversubscribe(MPIEXEC_OVERSUBSCRIBE_FLAG)
+# backwards compatibility: this variable used to be the only source of the flag
+set(MPIEXEC_OVERSUBSCRIBE_FLAG "${KATESTROPHE_MPIEXEC_OVERSUBSCRIBE_FLAG}")
 
 # Registers the Google Test + MPI entry point as the library target TARGET_NAME. The MPI runtime is
 # initialized with MPI_Init_thread at the requested THREAD_LEVEL (an MPI_THREAD_* constant); when
@@ -155,23 +173,33 @@ function(katestrophe_add_test_executable KATESTROPHE_TARGET)
   target_link_libraries(${KATESTROPHE_TARGET} PUBLIC KaTestrophe::main)
 endfunction()
 
-# Registers an executable target KATESTROPHE_TEST_TARGET as a test to be
-# executed with ctest
+# Registers an executable target KATESTROPHE_TEST_TARGET as a test to be executed with ctest, once
+# per rank count.
 #
-# KATESTROPHE_TEST_TARGET target name DISCOVER_TESTS sets whether the individual
-# tests should be added to the ctest output (like gtest_discover_tests) CORES
-# the number of MPI ranks to run the test with
+# KATESTROPHE_TEST_TARGET: the target name
+# DISCOVER_TESTS: add the individual tests to the ctest output (like gtest_discover_tests)
+# CORES: the numbers of MPI ranks to run the test with (default: MPIEXEC_MAX_NUMPROCS); counts above
+#        KATESTROPHE_MAX_CORES are skipped
+# WORKING_DIRECTORY: where the test runs (default: PROJECT_SOURCE_DIR)
 #
 # example: katestrophe_add_mpi_test(mytest CORES 2 4 8)
 function(katestrophe_add_mpi_test KATESTROPHE_TEST_TARGET)
-  cmake_parse_arguments(KATESTROPHE "DISCOVER_TESTS" "" "CORES" ${ARGN})
+  cmake_parse_arguments(KATESTROPHE "DISCOVER_TESTS" "WORKING_DIRECTORY" "CORES" ${ARGN})
   if(NOT KATESTROPHE_CORES)
     set(KATESTROPHE_CORES ${MPIEXEC_MAX_NUMPROCS})
   endif()
+  if(NOT KATESTROPHE_WORKING_DIRECTORY)
+    set(KATESTROPHE_WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+  endif()
   foreach(p ${KATESTROPHE_CORES})
+    if(NOT KATESTROPHE_MAX_CORES STREQUAL "" AND p GREATER KATESTROPHE_MAX_CORES)
+      message(VERBOSE "KaTestrophe: skipping ${KATESTROPHE_TEST_TARGET} with ${p} ranks "
+                      "(KATESTROPHE_MAX_CORES=${KATESTROPHE_MAX_CORES})")
+      continue()
+    endif()
     set(TEST_NAME "${KATESTROPHE_TEST_TARGET}.${p}cores")
     set(MPI_EXEC_COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${p}
-                         ${MPIEXEC_OVERSUBSCRIBE_FLAG} ${MPIEXEC_PREFLAGS}
+                         ${KATESTROPHE_MPIEXEC_OVERSUBSCRIBE_FLAG} ${MPIEXEC_PREFLAGS}
     )
     if(KATESTROPHE_DISCOVER_TESTS)
       string(REPLACE ";" " " MPI_EXEC_COMMAND "${MPI_EXEC_COMMAND}")
@@ -182,21 +210,16 @@ function(katestrophe_add_mpi_test KATESTROPHE_TEST_TARGET)
         TEST_SUFFIX
         ".${p}cores"
         WORKING_DIRECTORY
-        ${MPI}
+        ${KATESTROPHE_WORKING_DIRECTORY}
         MPI_EXEC_COMMAND
         "${MPI_EXEC_COMMAND}"
-        # PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" # Prevent memory
-        # leaks in OpenMPI from # making the test fail.
       )
     else()
       add_test(
         NAME "${TEST_NAME}"
         COMMAND ${MPI_EXEC_COMMAND} $<TARGET_FILE:${KATESTROPHE_TEST_TARGET}>
-        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        WORKING_DIRECTORY ${KATESTROPHE_WORKING_DIRECTORY}
       )
-      # # Prevent memory leaks in OpenMPI from making the test fail.
-      # set_property( TEST ${TEST_NAME} PROPERTY ENVIRONMENT
-      # "ASAN_OPTIONS=detect_leaks=0" )
     endif()
     # TODO: Do not rely on the return value of mpiexec to check if a test
     # succeeded, as this does not work for ULFM.

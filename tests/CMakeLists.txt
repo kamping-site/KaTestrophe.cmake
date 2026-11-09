@@ -11,3 +11,7 @@ katestrophe_add_mpi_test(simple_test CORES 1 2 3 4)
 # The DISCOVER_TESTS option allows CTest to discover the test and outputs each test run individually
 # in the CTest output, similar to Google Test's gtest_discover_tests.
 katestrophe_add_mpi_test(simple_test CORES 1 2 3 4 DISCOVER_TESTS)
+
+# More ranks than a typical CI runner has cores: exercises --oversubscribe with Open MPI, and
+# is skipped when KATESTROPHE_MAX_CORES is smaller.
+katestrophe_add_mpi_test(simple_test CORES 8)
