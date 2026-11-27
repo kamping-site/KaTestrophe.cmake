@@ -254,6 +254,8 @@ public:
         }
 
         result_vector.clear();
+        // Isolate consecutive tests, see MPIWrapperPrinter::OnTestEnd.
+        MPI_Barrier(comm);
     }
 
 private:
@@ -451,6 +453,12 @@ public:
         if (rank == 0) {
             listener->OnTestEnd(test_info);
         }
+        // Isolate consecutive tests: the gather above only synchronizes rank 0 with the others, so
+        // without this barrier a fast rank could start the next test (and e.g. send messages on
+        // MPI_COMM_WORLD) while a slow rank is still inside this one. gtest calls OnTestEnd after the
+        // test body and fixture have been destroyed, so once any rank leaves the barrier, every rank
+        // has released this test's objects (and cancelled their outstanding receives).
+        MPI_Barrier(comm);
     }
 
 #ifndef GTEST_REMOVE_LEGACY_TEST_CASEAPI_

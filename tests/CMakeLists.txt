@@ -15,3 +15,14 @@ katestrophe_add_mpi_test(simple_test CORES 1 2 3 4 DISCOVER_TESTS)
 # More ranks than a typical CI runner has cores: exercises --oversubscribe with Open MPI, and
 # is skipped when KATESTROPHE_MAX_CORES is smaller.
 katestrophe_add_mpi_test(simple_test CORES 8)
+
+# Consecutive tests in one binary must be isolated (issue #7); this only shows up when all tests run
+# in the same process, i.e. without DISCOVER_TESTS.
+add_executable(isolation_test isolation_test.cpp)
+target_link_libraries(isolation_test PRIVATE KaTestrophe::main)
+katestrophe_add_mpi_test(isolation_test CORES 2 4)
+
+# Per-test communicators via katestrophe::MPITest / KATESTROPHE_TEST.
+add_executable(comm_fixture_test comm_fixture_test.cpp)
+target_link_libraries(comm_fixture_test PRIVATE KaTestrophe::main)
+katestrophe_add_mpi_test(comm_fixture_test CORES 1 2 4)
