@@ -80,6 +80,33 @@ if (provided < MPI_THREAD_MULTIPLE) {
 }
 ```
 
+### Test isolation and per-test communicators
+
+When all tests of a binary run in one `mpiexec` call (i.e. without `DISCOVER_TESTS`), KaTestrophe
+puts a barrier after every test. No rank starts a test before every rank has finished the previous one
+and destroyed its objects. A rank still inside test N therefore never receives a message that a
+faster rank sends for test N+1. KaTestrophe sends its own result reports on a duplicate of
+`MPI_COMM_WORLD`, so they never interfere with messages of the tests.
+
+The barrier does not remove messages that a test sends and never receives. If your code takes a
+communicator, give each test its own with `KATESTROPHE_TEST`. The test then runs in the fixture
+`katestrophe::MPITest`, which duplicates `MPI_COMM_WORLD` before the test and frees it afterwards:
+
+```cpp
+#include <katestrophe.hpp>
+
+KATESTROPHE_TEST(MySuite, broadcast_works) {
+  // comm: this test's own duplicate of MPI_COMM_WORLD; rank and size refer to it
+  int value = rank == 0 ? 42 : 0;
+  MPI_Bcast(&value, 1, MPI_INT, 0, comm);
+  EXPECT_EQ(value, 42);
+}
+
+// or derive your own fixture and use TEST_F
+class MyFixture : public katestrophe::MPITest {};
+TEST_F(MyFixture, works) { /* uses comm, rank, size */ }
+```
+
 ### Running more ranks than cores
 
 Open MPI refuses to start more ranks than there are slots. KaTestrophe detects Open MPI from

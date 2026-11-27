@@ -51,7 +51,7 @@ target_sources(
   INTERFACE
   FILE_SET HEADERS
   BASE_DIRS ${CMAKE_CURRENT_LIST_DIR}
-  FILES gtest-mpi-listener.hpp
+  FILES gtest-mpi-listener.hpp katestrophe.hpp
 )
 
 target_link_libraries(
